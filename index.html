@@ -681,25 +681,25 @@ function updatePhotosHint() {
 }
 
 async function createSession() {
-  const clientName = document.getElementById('clientName').value.trim() || 'Cliente';
-  const eventName = document.getElementById('eventName').value.trim() || 'Álbum';
-  const minPhotos = parseInt(document.getElementById('minPhotos').value) || 0;
-  const maxPhotos = parseInt(document.getElementById('maxPhotos').value) || pendingPhotos.length;
-  const numPosters = Math.max(1, parseInt(document.getElementById('numPosters').value) || 1);
-  const notes = document.getElementById('sessionNotes').value.trim();
-
   const btn = document.getElementById('generateBtn');
-  btn.disabled = true;
-  const progress = document.getElementById('uploadProgress');
-  const fill = document.getElementById('progressFill');
-  const label = document.getElementById('progressLabel');
-  const sub = document.getElementById('progressSub');
-  const percentEl = document.getElementById('progressPercent');
-  progress.classList.add('show');
-  fill.style.width = '0%';
-  percentEl.textContent = '0%';
-
   try {
+    const clientName = document.getElementById('clientName').value.trim() || 'Cliente';
+    const eventName = document.getElementById('eventName').value.trim() || 'Álbum';
+    const minPhotos = parseInt(document.getElementById('minPhotos').value) || 0;
+    const maxPhotos = parseInt(document.getElementById('maxPhotos').value) || pendingPhotos.length;
+    const numPosters = Math.max(1, parseInt(document.getElementById('numPosters').value) || 1);
+    const notes = document.getElementById('sessionNotes').value.trim();
+
+    btn.disabled = true;
+    const progress = document.getElementById('uploadProgress');
+    const fill = document.getElementById('progressFill');
+    const label = document.getElementById('progressLabel');
+    const sub = document.getElementById('progressSub');
+    const percentEl = document.getElementById('progressPercent');
+    progress?.classList.add('show');
+    if (fill) fill.style.width = '0%';
+    if (percentEl) percentEl.textContent = '0%';
+
     const total = pendingPhotos.length;
     const uploadedPhotos = new Array(total);
     let completed = 0;
@@ -716,10 +716,10 @@ async function createSession() {
       uploadedPhotos[index] = { id: photo.id, name: photo.name, url: result.url };
       completed++;
       const pct = ((completed / total) * 100).toFixed(0);
-      label.textContent = `Enviando fotos: ${completed} de ${total}`;
-      sub.textContent = photo.name;
-      fill.style.width = pct + '%';
-      percentEl.textContent = pct + '%';
+      if (label) label.textContent = `Enviando fotos: ${completed} de ${total}`;
+      if (sub) sub.textContent = photo.name;
+      if (fill) fill.style.width = pct + '%';
+      if (percentEl) percentEl.textContent = pct + '%';
     }
 
     const queue = pendingPhotos.map((p, i) => ({ p, i }));
@@ -731,10 +731,10 @@ async function createSession() {
     }
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total || 1) }, worker));
 
-    fill.style.width = '100%';
-    percentEl.textContent = '100%';
-    label.textContent = 'Criando sessão...';
-    sub.textContent = '';
+    if (fill) fill.style.width = '100%';
+    if (percentEl) percentEl.textContent = '100%';
+    if (label) label.textContent = 'Criando sessão...';
+    if (sub) sub.textContent = '';
 
     const { session } = await api('/api/sessions', {
       method: 'POST',
@@ -747,13 +747,15 @@ async function createSession() {
     showToast('Link gerado com sucesso! 🎉', 'success');
     clearPhotos();
     loadSessions();
+    progress?.classList.remove('show');
   } catch (e) {
-    showToast('Erro: ' + e.message, 'error');
+    console.error('createSession falhou:', e);
+    showToast('Erro: ' + (e?.message || 'Falha desconhecida — veja o console (F12)'), 'error');
+    document.getElementById('uploadProgress')?.classList.remove('show');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Enviar fotos e gerar link →';
   }
-
-  progress.classList.remove('show');
-  btn.disabled = false;
-  btn.textContent = 'Enviar fotos e gerar link →';
 }
 
 function copyLink() {
