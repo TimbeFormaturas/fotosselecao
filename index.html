@@ -91,6 +91,7 @@
   .progress-sub { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
   .progress-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; width: 0; }
+  .progress-percent { font-size: 12px; color: var(--accent); font-weight: 600; margin-top: 8px; text-align: right; }
 
   /* PREVIEW GRID */
   .preview-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -321,6 +322,7 @@
       <div class="progress-label" id="progressLabel">Preparando envio...</div>
       <div class="progress-sub" id="progressSub"></div>
       <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-percent" id="progressPercent">0%</div>
     </div>
 
     <div id="previewSection" style="display:none; margin-bottom:24px;">
@@ -617,13 +619,17 @@ fileInput.addEventListener('change', () => handleFiles(fileInput.files));
 function handleFiles(files) {
   Array.from(files).forEach(file => {
     if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      pendingPhotos.push({ id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2), name: file.name, dataUrl: e.target.result, contentType: file.type });
-      renderPreview();
-    };
-    reader.readAsDataURL(file);
+    // Não lemos o arquivo inteiro em base64 aqui — isso é o que travava com muitas fotos.
+    // Guardamos só a referência ao File e uma URL leve (createObjectURL) pra preview.
+    pendingPhotos.push({
+      id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+      name: file.name,
+      file,
+      contentType: file.type,
+      previewUrl: URL.createObjectURL(file)
+    });
   });
+  renderPreview();
 }
 
 function renderPreview() {
@@ -632,14 +638,34 @@ function renderPreview() {
   document.getElementById('previewCount').textContent = `${pendingPhotos.length} foto${pendingPhotos.length !== 1 ? 's' : ''} selecionada${pendingPhotos.length !== 1 ? 's' : ''}`;
   document.getElementById('previewGrid').innerHTML = pendingPhotos.map(p => `
     <div class="preview-thumb">
-      <img src="${p.dataUrl}" alt="${p.name}">
+      <img src="${p.previewUrl}" alt="${p.name}" loading="lazy">
       <button class="remove-btn" onclick="removePhoto('${p.id}')">×</button>
     </div>
   `).join('');
 }
 
-function removePhoto(id) { pendingPhotos = pendingPhotos.filter(p => p.id !== id); renderPreview(); }
-function clearPhotos() { pendingPhotos = []; renderPreview(); }
+function removePhoto(id) {
+  const p = pendingPhotos.find(x => x.id === id);
+  if (p && p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+  pendingPhotos = pendingPhotos.filter(p => p.id !== id);
+  renderPreview();
+}
+function clearPhotos() {
+  pendingPhotos.forEach(p => { if (p.previewUrl) URL.revokeObjectURL(p.previewUrl); });
+  pendingPhotos = [];
+  renderPreview();
+}
+
+// Converte o File pra base64 só na hora do upload (e não fica guardado depois) — evita
+// segurar todas as fotos em memória ao mesmo tempo.
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Falha ao ler ' + file.name));
+    reader.readAsDataURL(file);
+  });
+}
 
 // ── CREATE SESSION ──
 function updatePhotosHint() {
@@ -668,24 +694,45 @@ async function createSession() {
   const fill = document.getElementById('progressFill');
   const label = document.getElementById('progressLabel');
   const sub = document.getElementById('progressSub');
+  const percentEl = document.getElementById('progressPercent');
   progress.classList.add('show');
+  fill.style.width = '0%';
+  percentEl.textContent = '0%';
 
   try {
-    const uploadedPhotos = [];
-    for (let i = 0; i < pendingPhotos.length; i++) {
-      const photo = pendingPhotos[i];
-      label.textContent = `Enviando foto ${i + 1} de ${pendingPhotos.length}`;
-      sub.textContent = photo.name;
-      fill.style.width = ((i / pendingPhotos.length) * 100).toFixed(0) + '%';
+    const total = pendingPhotos.length;
+    const uploadedPhotos = new Array(total);
+    let completed = 0;
+    const CONCURRENCY = 4; // uploads simultâneos — ajuste pra cima/baixo conforme necessário
 
+    async function uploadOne(photo, index) {
+      // Só converte pra base64 aqui, na hora de enviar essa foto específica —
+      // no máximo CONCURRENCY fotos em base64 na memória ao mesmo tempo, não todas.
+      const dataUrl = await fileToDataURL(photo.file);
       const result = await api('/api/upload-photo', {
         method: 'POST',
-        body: JSON.stringify({ sessionId: 'temp', photoId: photo.id, name: photo.name, dataUrl: photo.dataUrl, contentType: photo.contentType })
+        body: JSON.stringify({ sessionId: 'temp', photoId: photo.id, name: photo.name, dataUrl, contentType: photo.contentType })
       });
-      uploadedPhotos.push({ id: photo.id, name: photo.name, url: result.url });
+      uploadedPhotos[index] = { id: photo.id, name: photo.name, url: result.url };
+      completed++;
+      const pct = ((completed / total) * 100).toFixed(0);
+      label.textContent = `Enviando fotos: ${completed} de ${total}`;
+      sub.textContent = photo.name;
+      fill.style.width = pct + '%';
+      percentEl.textContent = pct + '%';
     }
 
+    const queue = pendingPhotos.map((p, i) => ({ p, i }));
+    async function worker() {
+      while (queue.length) {
+        const next = queue.shift();
+        await uploadOne(next.p, next.i);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total || 1) }, worker));
+
     fill.style.width = '100%';
+    percentEl.textContent = '100%';
     label.textContent = 'Criando sessão...';
     sub.textContent = '';
 
