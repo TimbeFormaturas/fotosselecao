@@ -311,11 +311,56 @@
     <h1 class="panel-title">Painel do Funcionário</h1>
     <p class="panel-sub">Envie as fotos e gere um link personalizado para o cliente selecionar.</p>
 
-    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-      <div class="upload-icon">🖼</div>
-      <h3>Arraste fotos aqui ou clique para selecionar</h3>
-      <p>JPG, PNG, WEBP — sem limite de arquivos</p>
-      <input type="file" id="fileInput" multiple accept="image/*">
+    <div class="config-card" style="padding-top:24px;">
+      <h3>Fotos por evento <span style="font-size:11px;color:var(--accent);text-transform:none;letter-spacing:0;font-weight:400;">— dê um nome a cada um; o cliente vê as fotos separadas por essas seções</span></h3>
+      <div style="display:flex; flex-direction:column; gap:26px;">
+
+        <div>
+          <input type="text" class="auth-input" id="zoneName_0" placeholder="Nome do evento 1 (ex: Cerimônia)" style="margin-bottom:12px;">
+          <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_0" onclick="document.getElementById('zoneInput_0').click()">
+            <div class="upload-icon" style="font-size:28px;">🖼</div>
+            <h3 style="font-size:14px;">Arraste fotos aqui ou clique para selecionar</h3>
+            <p style="font-size:12px;">JPG, PNG, WEBP</p>
+            <input type="file" id="zoneInput_0" multiple accept="image/*">
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+            <span id="zoneCount_0" style="font-size:12px;color:var(--muted);"></span>
+            <button class="ghost-btn" style="font-size:12px;" onclick="clearZone(0)">Limpar</button>
+          </div>
+          <div class="preview-grid" id="zonePreview_0" style="margin-top:8px;"></div>
+        </div>
+
+        <div>
+          <input type="text" class="auth-input" id="zoneName_1" placeholder="Nome do evento 2 (ex: Making of)" style="margin-bottom:12px;">
+          <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_1" onclick="document.getElementById('zoneInput_1').click()">
+            <div class="upload-icon" style="font-size:28px;">🖼</div>
+            <h3 style="font-size:14px;">Arraste fotos aqui ou clique para selecionar</h3>
+            <p style="font-size:12px;">JPG, PNG, WEBP</p>
+            <input type="file" id="zoneInput_1" multiple accept="image/*">
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+            <span id="zoneCount_1" style="font-size:12px;color:var(--muted);"></span>
+            <button class="ghost-btn" style="font-size:12px;" onclick="clearZone(1)">Limpar</button>
+          </div>
+          <div class="preview-grid" id="zonePreview_1" style="margin-top:8px;"></div>
+        </div>
+
+        <div>
+          <input type="text" class="auth-input" id="zoneName_2" placeholder="Nome do evento 3 (ex: Festa)" style="margin-bottom:12px;">
+          <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_2" onclick="document.getElementById('zoneInput_2').click()">
+            <div class="upload-icon" style="font-size:28px;">🖼</div>
+            <h3 style="font-size:14px;">Arraste fotos aqui ou clique para selecionar</h3>
+            <p style="font-size:12px;">JPG, PNG, WEBP</p>
+            <input type="file" id="zoneInput_2" multiple accept="image/*">
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+            <span id="zoneCount_2" style="font-size:12px;color:var(--muted);"></span>
+            <button class="ghost-btn" style="font-size:12px;" onclick="clearZone(2)">Limpar</button>
+          </div>
+          <div class="preview-grid" id="zonePreview_2" style="margin-top:8px;"></div>
+        </div>
+
+      </div>
     </div>
 
     <div class="upload-progress" id="uploadProgress">
@@ -323,14 +368,6 @@
       <div class="progress-sub" id="progressSub"></div>
       <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
       <div class="progress-percent" id="progressPercent">0%</div>
-    </div>
-
-    <div id="previewSection" style="display:none; margin-bottom:24px;">
-      <div class="preview-header">
-        <h3 id="previewCount" style="font-size:14px; font-weight:500;"></h3>
-        <button class="ghost-btn" onclick="clearPhotos()">Limpar tudo</button>
-      </div>
-      <div class="preview-grid" id="previewGrid"></div>
     </div>
 
     <div class="config-card">
@@ -420,6 +457,9 @@
       </div>
     </div>
     <div class="gallery-bar-actions" style="width:100%;justify-content:flex-end;">
+      <button class="download-btn show" id="downloadAllBtn" onclick="downloadAllPhotos()">
+        ⬇ Baixar tudo em alta qualidade
+      </button>
       <button class="download-btn" id="clientDownloadBtn" onclick="downloadSelected()">
         ⬇ Baixar selecionadas
       </button>
@@ -500,7 +540,6 @@ function hexToBytes(hex) { const b=new Uint8Array(hex.length/2); for(let i=0;i<b
 function bytesToHex(b) { return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(''); }
 
 // ── STATE ──
-let pendingPhotos = [];
 let selectedPhotos = new Set();
 let posterPhotoId = null;      // ID da foto selecionada como poster
 let currentSession = null;
@@ -608,20 +647,25 @@ function showClientView(sessionId) {
   loadClientGallery(sessionId);
 }
 
-// ── UPLOAD / PREVIEW ──
-const uploadZone = document.getElementById('uploadZone');
-const fileInput = document.getElementById('fileInput');
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
-uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
-fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+// ── UPLOAD / PREVIEW (3 blocos de evento) ──
+const EVENT_ZONES_COUNT = 3;
+let eventZonePhotos = [[], [], []]; // cada zona: [{id, name, file, contentType, previewUrl}]
 
-function handleFiles(files) {
+for (let z = 0; z < EVENT_ZONES_COUNT; z++) {
+  const dropEl = document.getElementById('zoneDrop_' + z);
+  const inputEl = document.getElementById('zoneInput_' + z);
+  dropEl.addEventListener('dragover', e => { e.preventDefault(); dropEl.classList.add('drag-over'); });
+  dropEl.addEventListener('dragleave', () => dropEl.classList.remove('drag-over'));
+  dropEl.addEventListener('drop', e => { e.preventDefault(); dropEl.classList.remove('drag-over'); handleZoneFiles(e.dataTransfer.files, z); });
+  inputEl.addEventListener('change', () => handleZoneFiles(inputEl.files, z));
+}
+
+function handleZoneFiles(files, zoneIndex) {
   Array.from(files).forEach(file => {
     if (!file.type.startsWith('image/')) return;
     // Não lemos o arquivo inteiro em base64 aqui — isso é o que travava com muitas fotos.
     // Guardamos só a referência ao File e uma URL leve (createObjectURL) pra preview.
-    pendingPhotos.push({
+    eventZonePhotos[zoneIndex].push({
       id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
       name: file.name,
       file,
@@ -629,31 +673,40 @@ function handleFiles(files) {
       previewUrl: URL.createObjectURL(file)
     });
   });
-  renderPreview();
+  renderZonePreview(zoneIndex);
 }
 
-function renderPreview() {
-  const section = document.getElementById('previewSection');
-  section.style.display = pendingPhotos.length ? 'block' : 'none';
-  document.getElementById('previewCount').textContent = `${pendingPhotos.length} foto${pendingPhotos.length !== 1 ? 's' : ''} selecionada${pendingPhotos.length !== 1 ? 's' : ''}`;
-  document.getElementById('previewGrid').innerHTML = pendingPhotos.map(p => `
+function renderZonePreview(zoneIndex) {
+  const photos = eventZonePhotos[zoneIndex];
+  const countEl = document.getElementById('zoneCount_' + zoneIndex);
+  if (countEl) countEl.textContent = photos.length ? `${photos.length} foto${photos.length !== 1 ? 's' : ''}` : '';
+  document.getElementById('zonePreview_' + zoneIndex).innerHTML = photos.map(p => `
     <div class="preview-thumb">
       <img src="${p.previewUrl}" alt="${p.name}" loading="lazy">
-      <button class="remove-btn" onclick="removePhoto('${p.id}')">×</button>
+      <button class="remove-btn" onclick="removeZonePhoto(${zoneIndex}, '${p.id}')">×</button>
     </div>
   `).join('');
 }
 
-function removePhoto(id) {
-  const p = pendingPhotos.find(x => x.id === id);
+function removeZonePhoto(zoneIndex, id) {
+  const p = eventZonePhotos[zoneIndex].find(x => x.id === id);
   if (p && p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-  pendingPhotos = pendingPhotos.filter(p => p.id !== id);
-  renderPreview();
+  eventZonePhotos[zoneIndex] = eventZonePhotos[zoneIndex].filter(x => x.id !== id);
+  renderZonePreview(zoneIndex);
 }
-function clearPhotos() {
-  pendingPhotos.forEach(p => { if (p.previewUrl) URL.revokeObjectURL(p.previewUrl); });
-  pendingPhotos = [];
-  renderPreview();
+
+function clearZone(zoneIndex) {
+  eventZonePhotos[zoneIndex].forEach(p => { if (p.previewUrl) URL.revokeObjectURL(p.previewUrl); });
+  eventZonePhotos[zoneIndex] = [];
+  renderZonePreview(zoneIndex);
+}
+
+function clearAllZones() {
+  for (let z = 0; z < EVENT_ZONES_COUNT; z++) {
+    clearZone(z);
+    const nameEl = document.getElementById('zoneName_' + z);
+    if (nameEl) nameEl.value = '';
+  }
 }
 
 // Converte o File pra base64 só na hora do upload (e não fica guardado depois) — evita
@@ -721,9 +774,23 @@ async function createSession() {
     const clientName = document.getElementById('clientName').value.trim() || 'Cliente';
     const eventName = document.getElementById('eventName').value.trim() || 'Álbum';
     const minPhotos = parseInt(document.getElementById('minPhotos').value) || 0;
-    const maxPhotos = parseInt(document.getElementById('maxPhotos').value) || pendingPhotos.length;
     const numPosters = Math.max(1, parseInt(document.getElementById('numPosters').value) || 1);
     const notes = document.getElementById('sessionNotes').value.trim();
+
+    // Junta as fotos dos 3 blocos de evento, cada uma marcada com o nome do seu bloco —
+    // é essa marcação que o cliente vê como separador na galeria.
+    const allPhotos = [];
+    for (let z = 0; z < EVENT_ZONES_COUNT; z++) {
+      const zoneNameEl = document.getElementById('zoneName_' + z);
+      const zoneName = (zoneNameEl?.value || '').trim() || `Evento ${z + 1}`;
+      eventZonePhotos[z].forEach(p => allPhotos.push({ ...p, eventName: zoneName }));
+    }
+    if (!allPhotos.length) {
+      showToast('Adicione fotos em pelo menos um dos blocos de evento.', 'error');
+      btn.disabled = false;
+      return;
+    }
+    const maxPhotos = parseInt(document.getElementById('maxPhotos').value) || allPhotos.length;
 
     btn.disabled = true;
     const progress = document.getElementById('uploadProgress');
@@ -735,7 +802,7 @@ async function createSession() {
     if (fill) fill.style.width = '0%';
     if (percentEl) percentEl.textContent = '0%';
 
-    const total = pendingPhotos.length;
+    const total = allPhotos.length;
     const uploadedPhotos = new Array(total);
     let completed = 0;
     const CONCURRENCY = 4; // uploads simultâneos — ajuste pra cima/baixo conforme necessário
@@ -749,7 +816,7 @@ async function createSession() {
         method: 'POST',
         body: JSON.stringify({ sessionId: 'temp', photoId: photo.id, name: photo.name, dataUrl, contentType: photo.contentType, thumbDataUrl })
       });
-      uploadedPhotos[index] = { id: photo.id, name: photo.name, url: result.url, thumbUrl: result.thumbUrl || result.url };
+      uploadedPhotos[index] = { id: photo.id, name: photo.name, url: result.url, thumbUrl: result.thumbUrl || result.url, eventName: photo.eventName };
       completed++;
       const pct = ((completed / total) * 100).toFixed(0);
       if (label) label.textContent = `Enviando fotos: ${completed} de ${total}`;
@@ -758,7 +825,7 @@ async function createSession() {
       if (percentEl) percentEl.textContent = pct + '%';
     }
 
-    const queue = pendingPhotos.map((p, i) => ({ p, i }));
+    const queue = allPhotos.map((p, i) => ({ p, i }));
     async function worker() {
       while (queue.length) {
         const next = queue.shift();
@@ -781,7 +848,7 @@ async function createSession() {
     document.getElementById('linkText').textContent = link;
     document.getElementById('linkBox').classList.add('show');
     showToast('Link gerado com sucesso! 🎉', 'success');
-    clearPhotos();
+    clearAllZones();
     loadSessions();
     progress?.classList.remove('show');
   } catch (e) {
@@ -1000,7 +1067,10 @@ async function loadClientGallery(sessionId) {
         <div class="confirmed-banner" style="grid-column:1/-1">
           <h3>✅ Seleção já confirmada!</h3>
           <p>Você selecionou ${confirmedSelections.length} foto${confirmedSelections.length !== 1 ? 's' : ''}. Aguarde o contato do funcionário.</p>
-          <button class="primary-btn" style="max-width:240px;margin:0 auto;" onclick="downloadPhotos(confirmedSelections)">⬇ Baixar fotos selecionadas</button>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <button class="primary-btn" style="max-width:240px;" onclick="downloadPhotos(confirmedSelections)">⬇ Baixar fotos selecionadas</button>
+            <button class="ghost-btn" style="max-width:280px;padding:14px 20px;" onclick="downloadAllPhotos()">⬇ Baixar tudo em alta qualidade</button>
+          </div>
           <div class="confirmed-photos">
             ${confirmedSelections.map(p => `<div class="photo-thumb"><img src="${p.thumbUrl || p.url}" alt="${p.name}" loading="lazy"></div>`).join('')}
           </div>
@@ -1072,30 +1142,48 @@ function enterPhotosStep() {
   renderGalleryGrid();
 }
 
+// Agrupa fotos pela ordem em que os eventos aparecem, mantendo a ordem original.
+function groupByEvent(list) {
+  const groups = [];
+  const map = new Map();
+  list.forEach(p => {
+    const key = p.eventName || 'Fotos';
+    if (!map.has(key)) { map.set(key, { name: key, photos: [] }); groups.push(map.get(key)); }
+    map.get(key).photos.push(p);
+  });
+  return groups;
+}
+
 function renderGalleryGrid() {
   const grid = document.getElementById('galleryGrid');
-  const photos = currentSession.photos;
+  const photos = galleryStep === 'poster'
+    ? currentSession.photos
+    : currentSession.photos.filter(p => !posterPhotoIds.has(p.id));
 
-  if (galleryStep === 'poster') {
-    grid.innerHTML = photos.map((p, i) => `
-      <div class="gitem" id="gi_${p.id}" onclick="selectPoster('${p.id}')">
-        <img src="${p.thumbUrl || p.url}" alt="${p.name}" loading="lazy">
-        <div class="overlay"></div>
-        <div class="chk">★</div>
-        <div class="num">#${String(i + 1).padStart(3, '0')}</div>
+  const groups = groupByEvent(photos);
+  const showLabels = groups.length > 1; // sessão com 1 evento só fica igual a antes
+  const clickFn = galleryStep === 'poster' ? 'selectPoster' : 'togglePhoto';
+  const chkChar = galleryStep === 'poster' ? '★' : '✓';
+
+  let idx = 0;
+  grid.innerHTML = groups.map(group => {
+    const items = group.photos.map(p => {
+      idx++;
+      return `
+        <div class="gitem" id="gi_${p.id}" onclick="${clickFn}('${p.id}')">
+          <img src="${p.thumbUrl || p.url}" alt="${p.name}" loading="lazy">
+          <div class="overlay"></div>
+          <div class="chk">${chkChar}</div>
+          <div class="num">#${String(idx).padStart(3, '0')}</div>
+        </div>`;
+    }).join('');
+    if (!showLabels) return items;
+    return `
+      <div style="grid-column:1/-1;">
+        <div style="font-size:12px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;padding:14px 2px 10px;border-bottom:0.5px solid var(--border);margin-bottom:4px;">${esc2(group.name)}</div>
       </div>
-    `).join('');
-  } else {
-    const otherPhotos = photos.filter(p => !posterPhotoIds.has(p.id));
-    grid.innerHTML = otherPhotos.map((p, i) => `
-      <div class="gitem" id="gi_${p.id}" onclick="togglePhoto('${p.id}')">
-        <img src="${p.thumbUrl || p.url}" alt="${p.name}" loading="lazy">
-        <div class="overlay"></div>
-        <div class="chk">✓</div>
-        <div class="num">#${String(i + 1).padStart(3, '0')}</div>
-      </div>
-    `).join('');
-  }
+      ${items}`;
+  }).join('');
 }
 
 function selectPoster(id) {
@@ -1162,6 +1250,11 @@ function downloadSelected() {
 
 function downloadConfirmed() {
   downloadPhotos(confirmedSelections);
+}
+
+function downloadAllPhotos() {
+  if (!currentSession) return;
+  downloadPhotos(currentSession.photos);
 }
 
 async function confirmSelection() {
