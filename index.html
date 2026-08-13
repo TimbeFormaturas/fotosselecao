@@ -825,6 +825,8 @@ function updatePhotosHint() {
 
 async function createSession() {
   const btn = document.getElementById('generateBtn');
+  if (btn.disabled) return; // evita disparo duplo (duplo clique) criando 2 envios em paralelo
+  btn.disabled = true;
   try {
     const clientName = document.getElementById('clientName').value.trim() || 'Cliente';
     const eventName = document.getElementById('eventName').value.trim() || 'Álbum';
@@ -847,7 +849,6 @@ async function createSession() {
     }
     const maxPhotos = parseInt(document.getElementById('maxPhotos').value) || allPhotos.length;
 
-    btn.disabled = true;
     const progress = document.getElementById('uploadProgress');
     const fill = document.getElementById('progressFill');
     const label = document.getElementById('progressLabel');
@@ -860,7 +861,7 @@ async function createSession() {
     const total = allPhotos.length;
     const uploadedPhotos = new Array(total);
     let completed = 0;
-    const CONCURRENCY = 4; // uploads simultâneos — ajuste pra cima/baixo conforme necessário
+    const CONCURRENCY = 1; // uploads simultâneos — reduzido de 4: fotos "Editadas" grandes (15-19MB, ~25-30MB em base64) em paralelo estavam estourando timeout do Worker/rede ("Failed to fetch")
 
     async function uploadOne(photo, index) {
       // Só converte pra base64 aqui, na hora de enviar essa foto específica —
