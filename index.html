@@ -320,8 +320,8 @@
           <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_0" onclick="document.getElementById('zoneInput_0').click()">
             <div class="upload-icon" style="font-size:28px;">🖼</div>
             <h3 style="font-size:14px;">Arraste fotos aqui ou clique para selecionar</h3>
-            <p style="font-size:12px;">JPG, PNG, WEBP</p>
-            <input type="file" id="zoneInput_0" multiple accept="image/*">
+            <p style="font-size:12px;">JPG, PNG, WEBP, CR2</p>
+            <input type="file" id="zoneInput_0" multiple accept="image/*,.cr2">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
             <span id="zoneCount_0" style="font-size:12px;color:var(--muted);"></span>
@@ -335,8 +335,8 @@
           <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_1" onclick="document.getElementById('zoneInput_1').click()">
             <div class="upload-icon" style="font-size:28px;">🖼</div>
             <h3 style="font-size:14px;">Arraste fotos aqui ou clique para selecionar</h3>
-            <p style="font-size:12px;">JPG, PNG, WEBP</p>
-            <input type="file" id="zoneInput_1" multiple accept="image/*">
+            <p style="font-size:12px;">JPG, PNG, WEBP, CR2</p>
+            <input type="file" id="zoneInput_1" multiple accept="image/*,.cr2">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
             <span id="zoneCount_1" style="font-size:12px;color:var(--muted);"></span>
@@ -350,8 +350,8 @@
           <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_2" onclick="document.getElementById('zoneInput_2').click()">
             <div class="upload-icon" style="font-size:28px;">🖼</div>
             <h3 style="font-size:14px;">Arraste fotos aqui ou clique para selecionar</h3>
-            <p style="font-size:12px;">JPG, PNG, WEBP</p>
-            <input type="file" id="zoneInput_2" multiple accept="image/*">
+            <p style="font-size:12px;">JPG, PNG, WEBP, CR2</p>
+            <input type="file" id="zoneInput_2" multiple accept="image/*,.cr2">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
             <span id="zoneCount_2" style="font-size:12px;color:var(--muted);"></span>
@@ -660,20 +660,67 @@ for (let z = 0; z < EVENT_ZONES_COUNT; z++) {
   inputEl.addEventListener('change', () => handleZoneFiles(inputEl.files, z));
 }
 
-function handleZoneFiles(files, zoneIndex) {
-  Array.from(files).forEach(file => {
-    if (!file.type.startsWith('image/')) return;
+function isRawFile(file) {
+  return /\.cr2$/i.test(file.name || '');
+}
+
+// O CR2 da Canon é um contêiner TIFF: a IFD0 (primeiro bloco de metadados do
+// arquivo) aponta pra uma prévia JPEG em resolução total, gravada pela própria
+// câmera — não é a foto RAW em si (essa fica numa IFD separada, referenciada só
+// pelo cabeçalho específico do CR2, e não é um JPEG decodificável pelo navegador).
+// Aqui só lemos os primeiros KB do arquivo pra achar esses bytes; não decodificamos nada.
+async function extractRawPreviewBlob(file) {
+  try {
+    const headBuf = await file.slice(0, 512 * 1024).arrayBuffer();
+    const view = new DataView(headBuf);
+    if (view.getUint16(0, true) !== 0x4949) return null; // CR2 é sempre little-endian ("II")
+    if (view.getUint16(2, true) !== 42) return null; // magic TIFF
+    const ifd0Offset = view.getUint32(4, true);
+    const count = view.getUint16(ifd0Offset, true);
+    let compression = null, stripOffset = null, stripBytes = null;
+    for (let i = 0; i < count; i++) {
+      const eOff = ifd0Offset + 2 + i * 12;
+      const tag = view.getUint16(eOff, true);
+      const type = view.getUint16(eOff + 2, true);
+      const numValues = view.getUint32(eOff + 4, true);
+      const value = (type === 3 && numValues === 1) ? view.getUint16(eOff + 8, true) : view.getUint32(eOff + 8, true);
+      if (tag === 0x0103) compression = value;      // Compression
+      else if (tag === 0x0111) stripOffset = value;  // StripOffsets
+      else if (tag === 0x0117) stripBytes = value;   // StripByteCounts
+    }
+    // Compression 6 = JPEG "old-style": é exatamente a prévia de resolução total.
+    if (compression !== 6 || !stripOffset || !stripBytes) return null;
+    return file.slice(stripOffset, stripOffset + stripBytes, 'image/jpeg');
+  } catch (e) {
+    console.warn('Não foi possível extrair preview do RAW', file.name, e);
+    return null;
+  }
+}
+
+async function handleZoneFiles(files, zoneIndex) {
+  for (const file of Array.from(files)) {
+    const raw = isRawFile(file);
+    if (!file.type.startsWith('image/') && !raw) continue;
     // Não lemos o arquivo inteiro em base64 aqui — isso é o que travava com muitas fotos.
     // Guardamos só a referência ao File e uma URL leve (createObjectURL) pra preview.
+    // CR2 é RAW: o navegador não decodifica, então extraímos o JPEG embutido pra prévia.
+    let previewUrl = '';
+    if (raw) {
+      const previewBlob = await extractRawPreviewBlob(file);
+      if (previewBlob) previewUrl = URL.createObjectURL(previewBlob);
+    } else {
+      previewUrl = URL.createObjectURL(file);
+    }
     eventZonePhotos[zoneIndex].push({
       id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
       name: file.name,
       file,
-      contentType: file.type,
-      previewUrl: URL.createObjectURL(file)
+      contentType: raw ? 'image/x-canon-cr2' : file.type,
+      isRaw: raw,
+      previewUrl
     });
-  });
-  renderZonePreview(zoneIndex);
+    renderZonePreview(zoneIndex);
+  }
 }
 
 function renderZonePreview(zoneIndex) {
@@ -682,7 +729,9 @@ function renderZonePreview(zoneIndex) {
   if (countEl) countEl.textContent = photos.length ? `${photos.length} foto${photos.length !== 1 ? 's' : ''}` : '';
   document.getElementById('zonePreview_' + zoneIndex).innerHTML = photos.map(p => `
     <div class="preview-thumb">
-      <img src="${p.previewUrl}" alt="${p.name}" loading="lazy">
+      ${p.previewUrl
+        ? `<img src="${p.previewUrl}" alt="${p.name}" loading="lazy">`
+        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#2a2a2a;color:#999;font-size:11px;text-align:center;padding:4px;">RAW<br>sem prévia</div>`}
       <button class="remove-btn" onclick="removeZonePhoto(${zoneIndex}, '${p.id}')">×</button>
     </div>
   `).join('');
@@ -726,32 +775,38 @@ function fileToDataURL(file) {
 // Se falhar por qualquer motivo, resolve null e quem chamou cai de volta pra foto original.
 function generateThumbnail(file, maxDim = 1100, quality = 0.72) {
   return new Promise((resolve) => {
-    const objectUrl = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      try {
-        let { width, height } = img;
-        if (width > height && width > maxDim) { height = Math.round(height * maxDim / width); width = maxDim; }
-        else if (height >= width && height > maxDim) { width = Math.round(width * maxDim / height); height = maxDim; }
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => {
+    (async () => {
+      // CR2 não é decodificável via <img>/canvas — usamos o JPEG embutido no arquivo
+      // como fonte e aplicamos o mesmo redimensionamento das fotos normais.
+      const sourceBlob = isRawFile(file) ? await extractRawPreviewBlob(file) : file;
+      if (!sourceBlob) { resolve(null); return; }
+      const objectUrl = URL.createObjectURL(sourceBlob);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          if (width > height && width > maxDim) { height = Math.round(height * maxDim / width); width = maxDim; }
+          else if (height >= width && height > maxDim) { width = Math.round(width * maxDim / height); height = maxDim; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          canvas.toBlob((blob) => {
+            URL.revokeObjectURL(objectUrl);
+            if (!blob) { resolve(null); return; }
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          }, 'image/jpeg', quality);
+        } catch (e) {
+          console.warn('Não foi possível gerar miniatura de', file.name, '— usando foto original.', e);
           URL.revokeObjectURL(objectUrl);
-          if (!blob) { resolve(null); return; }
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => resolve(null);
-          reader.readAsDataURL(blob);
-        }, 'image/jpeg', quality);
-      } catch (e) {
-        console.warn('Não foi possível gerar miniatura de', file.name, '— usando foto original.', e);
-        URL.revokeObjectURL(objectUrl);
-        resolve(null);
-      }
-    };
-    img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(null); };
-    img.src = objectUrl;
+          resolve(null);
+        }
+      };
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(null); };
+      img.src = objectUrl;
+    })();
   });
 }
 
@@ -984,7 +1039,7 @@ function renderSessions(sessions) {
               ${s.selections.map(p => `
                 <div class="photo-cell">
                   <div class="photo-thumb" style="${p.isPoster ? 'border-color:#f5c842;box-shadow:0 0 0 2px rgba(245,200,66,0.3);' : ''}">
-                    <img src="${p.thumbUrl || p.url}" alt="${p.name}" loading="lazy">
+                    ${photoThumbImg(p)}
                   </div>
                   <div class="photo-label">${p.isPoster ? '⭐ Poster' : p.name}</div>
                 </div>`).join('')}
@@ -1072,7 +1127,7 @@ async function loadClientGallery(sessionId) {
             <button class="ghost-btn" style="max-width:280px;padding:14px 20px;" onclick="downloadAllPhotos()">⬇ Baixar tudo em alta qualidade</button>
           </div>
           <div class="confirmed-photos">
-            ${confirmedSelections.map(p => `<div class="photo-thumb"><img src="${p.thumbUrl || p.url}" alt="${p.name}" loading="lazy"></div>`).join('')}
+            ${confirmedSelections.map(p => `<div class="photo-thumb">${photoThumbImg(p)}</div>`).join('')}
           </div>
         </div>`;
       return;
@@ -1171,7 +1226,7 @@ function renderGalleryGrid() {
       idx++;
       return `
         <div class="gitem" id="gi_${p.id}" onclick="${clickFn}('${p.id}')">
-          <img src="${p.thumbUrl || p.url}" alt="${p.name}" loading="lazy">
+          ${photoThumbImg(p)}
           <div class="overlay"></div>
           <div class="chk">${chkChar}</div>
           <div class="num">#${String(idx).padStart(3, '0')}</div>
@@ -1353,6 +1408,16 @@ async function markRead(id) {
 
 function esc2(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function esc(str) { return esc2(str); }
+
+// Fallback pro raríssimo caso de um CR2 sem preview embutido: em vez de ícone
+// de imagem quebrada, mostra um placeholder — usado nas 3 grades de fotos abaixo.
+function photoThumbImg(p) {
+  const src = p.thumbUrl || p.url;
+  if (/\.cr2(\?|$)/i.test(src || '')) {
+    return `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#2a2a2a;color:#999;font-size:10px;">RAW</div>`;
+  }
+  return `<img src="${src}" alt="${esc2(p.name)}" loading="lazy">`;
+}
 
 // ── TOAST ──
 window.showToast = function(msg, type = 'info') {
