@@ -206,6 +206,9 @@
   .gitem.poster-sel { border-color: #f5c842; box-shadow: 0 0 0 2px rgba(245,200,66,0.35); }
   .gitem.poster-sel .chk { background: #f5c842; border-color: #f5c842; color: #1a1208; font-size: 16px; }
   .gitem.poster-sel .num { color: #f5c842; }
+  .gitem.cover-sel { border-color: #7ab8f5; box-shadow: 0 0 0 2px rgba(122,184,245,0.35); }
+  .gitem.cover-sel .chk { background: #7ab8f5; border-color: #7ab8f5; color: #0a1a2e; font-size: 16px; }
+  .gitem.cover-sel .num { color: #7ab8f5; }
   .gitem img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.3s; }
   .gitem:hover img { transform: scale(1.04); }
   .gitem .overlay { position: absolute; inset: 0; background: rgba(200,169,110,0.1); opacity: 0; transition: opacity 0.2s; }
@@ -384,6 +387,18 @@
       </div>
       <div class="form-row">
         <div class="form-group">
+          <label>Telefone do cliente <span style="font-size:11px;color:var(--accent)">(pra enviar o link por WhatsApp)</span></label>
+          <input type="text" id="clientPhone" placeholder="Ex: (47) 99999-9999">
+        </div>
+        <div class="form-group">
+          <label>Plano</label>
+          <button type="button" id="planoBtn" onclick="openPlanoModal()" style="text-align:left;background:var(--surface2);border:0.5px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--muted);font-family:var(--font-body);font-size:14px;cursor:pointer;transition:border-color 0.2s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+            Escolher plano (Bronze / Prata / Ouro)
+          </button>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
           <label>Mínimo de fotos</label>
           <input type="number" id="minPhotos" value="0" min="0">
         </div>
@@ -422,8 +437,14 @@
         <div class="link-text" id="linkText">—</div>
         <button class="ghost-btn" id="copyBtn" onclick="copyLink()">Copiar</button>
       </div>
-      <p style="font-size:12px;color:var(--muted);margin-top:10px;">
+      <p style="font-size:12px;color:var(--muted);margin-top:10px;margin-bottom:12px;">
         Envie por WhatsApp ou e-mail. O link funciona em qualquer dispositivo.
+      </p>
+      <a id="whatsappBtn" href="#" target="_blank" rel="noopener" style="display:none;align-items:center;justify-content:center;gap:8px;background:#25D366;color:#0a1a0f;font-weight:600;padding:12px 20px;border-radius:8px;text-decoration:none;font-size:14px;">
+        💬 Enviar link por WhatsApp
+      </a>
+      <p id="whatsappHint" style="display:none;font-size:12px;color:var(--muted);margin-top:8px;">
+        Preencha o telefone do cliente acima antes de gerar o link pra habilitar o envio direto.
       </p>
     </div>
 
@@ -500,11 +521,39 @@
     <textarea id="clientNotesInput" placeholder="Ex: Gostaria que a foto 003 fosse mais clara. Na foto 007 pode cortar um pouco mais o lado direito…"
       style="background:var(--surface2);border:0.5px solid var(--border2);border-radius:10px;padding:14px;color:var(--text);font-family:var(--font-body);font-size:14px;outline:none;resize:vertical;min-height:110px;width:100%;line-height:1.6;margin-bottom:6px;"
       onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"></textarea>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:20px;">Campo opcional — pode deixar em branco se não tiver observações.</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Campo opcional — pode deixar em branco se não tiver observações.</p>
+    <div style="text-align:left;margin-bottom:20px;">
+      <label style="font-size:13px;color:var(--muted);display:block;margin-bottom:6px;">Endereço para entrega</label>
+      <input type="text" id="clientAddressInput" placeholder="Rua, número, bairro, cidade — CEP"
+        style="background:var(--surface2);border:0.5px solid var(--border2);border-radius:10px;padding:12px 14px;color:var(--text);font-family:var(--font-body);font-size:14px;outline:none;width:100%;"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+    </div>
     <div style="display:flex;gap:12px;justify-content:flex-end;">
       <button onclick="document.getElementById('clientNotesModal').classList.remove('show')" style="background:var(--surface2);border:0.5px solid var(--border2);color:var(--muted);padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px;">Cancelar</button>
       <button onclick="submitConfirmation()" style="background:var(--accent);color:#1a1208;font-weight:600;padding:10px 24px;border-radius:8px;border:none;cursor:pointer;font-size:14px;">Confirmar seleção →</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL PLANO (BRONZE / PRATA / OURO) -->
+<div class="modal-overlay" id="planoModal">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-icon">🏆</div>
+    <h2>Escolha o plano</h2>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">Define o plano contratado pelo cliente para essa sessão.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button type="button" onclick="choosePlano('BRONZE')" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:0.5px solid var(--border2);border-radius:10px;padding:16px 18px;color:var(--text);font-family:var(--font-body);cursor:pointer;text-align:left;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#cd7f32'" onmouseout="this.style.borderColor='var(--border2)'">
+        <span style="font-weight:600;">🥉 Bronze</span>
+      </button>
+      <button type="button" onclick="choosePlano('PRATA')" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:0.5px solid var(--border2);border-radius:10px;padding:16px 18px;color:var(--text);font-family:var(--font-body);cursor:pointer;text-align:left;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#c0c0c0'" onmouseout="this.style.borderColor='var(--border2)'">
+        <span style="font-weight:600;">🥈 Prata</span>
+      </button>
+      <button type="button" onclick="choosePlano('OURO')" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:0.5px solid var(--border2);border-radius:10px;padding:16px 18px;color:var(--text);font-family:var(--font-body);cursor:pointer;text-align:left;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+        <span style="font-weight:600;">🥇 Ouro</span>
+        <span style="font-size:11px;color:var(--accent);">inclui escolha de capa</span>
+      </button>
+    </div>
+    <button onclick="document.getElementById('planoModal').classList.remove('show')" style="margin-top:20px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;">Cancelar</button>
   </div>
 </div>
 
@@ -645,6 +694,21 @@ function showClientView(sessionId) {
   document.getElementById('view-photographer').classList.remove('active');
   document.getElementById('view-client').classList.add('active');
   loadClientGallery(sessionId);
+}
+
+// ── PLANO (BRONZE / PRATA / OURO) ──
+let selectedPlano = null;
+const PLANO_LABELS = { BRONZE: '🥉 Bronze', PRATA: '🥈 Prata', OURO: '🥇 Ouro' };
+
+function openPlanoModal() {
+  document.getElementById('planoModal').classList.add('show');
+}
+
+function choosePlano(p) {
+  selectedPlano = p;
+  document.getElementById('planoBtn').textContent = PLANO_LABELS[p];
+  document.getElementById('planoBtn').style.color = 'var(--text)';
+  document.getElementById('planoModal').classList.remove('show');
 }
 
 // ── UPLOAD / PREVIEW (3 blocos de evento) ──
@@ -830,9 +894,17 @@ async function createSession() {
   try {
     const clientName = document.getElementById('clientName').value.trim() || 'Cliente';
     const eventName = document.getElementById('eventName').value.trim() || 'Álbum';
+    const clientPhone = document.getElementById('clientPhone').value.trim();
     const minPhotos = parseInt(document.getElementById('minPhotos').value) || 0;
     const numPosters = Math.max(1, parseInt(document.getElementById('numPosters').value) || 1);
     const notes = document.getElementById('sessionNotes').value.trim();
+
+    if (!selectedPlano) {
+      showToast('Escolha o plano (Bronze / Prata / Ouro) antes de enviar.', 'error');
+      btn.disabled = false;
+      return;
+    }
+    const plano = selectedPlano;
 
     // Junta as fotos dos 3 blocos de evento, cada uma marcada com o nome do seu bloco —
     // é essa marcação que o cliente vê como separador na galeria.
@@ -897,13 +969,27 @@ async function createSession() {
 
     const { session } = await api('/api/sessions', {
       method: 'POST',
-      body: JSON.stringify({ clientName, eventName, minPhotos, maxPhotos, numPosters, notes, photos: uploadedPhotos })
+      body: JSON.stringify({ clientName, eventName, clientPhone, plano, minPhotos, maxPhotos, numPosters, notes, photos: uploadedPhotos })
     });
 
     const link = `${location.origin}${location.pathname}?session=${session.id}`;
     document.getElementById('linkText').textContent = link;
     document.getElementById('linkBox').classList.add('show');
     showToast('Link gerado com sucesso! 🎉', 'success');
+
+    const whatsappBtn = document.getElementById('whatsappBtn');
+    const whatsappHint = document.getElementById('whatsappHint');
+    const phoneDigits = clientPhone.replace(/\D/g, '');
+    if (phoneDigits) {
+      const fullPhone = phoneDigits.length <= 11 ? '55' + phoneDigits : phoneDigits; // assume DDD+número sem 55 se vier curto
+      const message = `Olá, ${clientName}! 📸\n\nSuas fotos de ${eventName} já estão prontas para seleção.\n\nAcesse o link abaixo para escolher suas fotos:\n${link}`;
+      whatsappBtn.href = `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`;
+      whatsappBtn.style.display = 'flex';
+      whatsappHint.style.display = 'none';
+    } else {
+      whatsappBtn.style.display = 'none';
+      whatsappHint.style.display = 'block';
+    }
     clearAllZones();
     loadSessions();
     progress?.classList.remove('show');
@@ -1014,11 +1100,14 @@ function renderSessions(sessions) {
     const date = s.confirmedAt ? new Date(s.confirmedAt).toLocaleString('pt-BR') : new Date(s.createdAt).toLocaleString('pt-BR');
     const link = `${location.origin}${location.pathname}?session=${s.id}`;
     const isOwner = !s.ownerEmail || s.ownerEmail.toLowerCase() === authUserEmail.toLowerCase();
+    const planoTag = s.plano ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle;${s.plano === 'OURO' ? 'background:rgba(200,169,110,0.15);color:var(--accent);' : s.plano === 'PRATA' ? 'background:rgba(192,192,192,0.15);color:#c0c0c0;' : 'background:rgba(205,127,50,0.15);color:#cd7f32;'}">${PLANO_LABELS[s.plano] || s.plano}</span>` : '';
+    const phoneDigits = (s.clientPhone || '').replace(/\D/g, '');
+    const whatsappQuickLink = phoneDigits ? `https://wa.me/${phoneDigits.length <= 11 ? '55' + phoneDigits : phoneDigits}?text=${encodeURIComponent(`Olá, ${s.clientName}! 📸\n\nSuas fotos de ${s.eventName} já estão prontas para seleção.\n\nAcesse o link abaixo para escolher suas fotos:\n${link}`)}` : '';
     return `
       <div class="session-card ${hasSel ? 'has-selection' : ''}">
         <div class="session-header" onclick="toggleSession('${s.id}')">
           <div class="session-info">
-            <div class="session-name">${s.clientName}</div>
+            <div class="session-name">${s.clientName}${planoTag}</div>
             <div class="session-meta">${s.eventName} · ${date}</div>
           </div>
           <div class="session-badge ${hasSel ? 'done' : 'pending'}">
@@ -1031,9 +1120,11 @@ function renderSessions(sessions) {
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               ${hasSel ? `<button class="ghost-btn" style="font-size:12px;" onclick='adminDownload(${JSON.stringify(s.selections)})'>⬇ Baixar selecionadas</button>` : ''}
               <button class="ghost-btn" style="font-size:12px;" onclick="copyToClip('${link}')">Copiar link</button>
+              ${whatsappQuickLink ? `<a class="ghost-btn" style="font-size:12px;text-decoration:none;" href="${whatsappQuickLink}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ''}
               ${isOwner ? `<button class="danger-btn" style="font-size:12px;" onclick="clearSelection('${s.id}')">🗑 Excluir sessão</button>` : ''}
             </div>
           </div>
+          ${s.clientAddress ? `<div style="background:rgba(200,169,110,0.07);border:0.5px solid rgba(200,169,110,0.22);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--muted);"><span style="color:var(--accent);font-weight:600;">📍 Endereço: </span>${esc(s.clientAddress)}</div>` : ''}
           ${s.notes ? `<div style="background:rgba(200,169,110,0.07);border:0.5px solid rgba(200,169,110,0.22);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--muted);"><span style="color:var(--accent);font-weight:600;">📋 Obs: </span>${esc(s.notes)}</div>` : ''}
           ${s.clientNotes ? `<div style="background:rgba(91,189,138,0.07);border:0.5px solid rgba(91,189,138,0.25);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--muted);"><span style="color:var(--success);font-weight:600;">💬 Cliente: </span>${esc(s.clientNotes)}</div>` : ''}
           ${hasSel ? `
@@ -1041,10 +1132,10 @@ function renderSessions(sessions) {
             <div class="photos-grid">
               ${s.selections.map(p => `
                 <div class="photo-cell">
-                  <div class="photo-thumb" style="${p.isPoster ? 'border-color:#f5c842;box-shadow:0 0 0 2px rgba(245,200,66,0.3);' : ''}">
+                  <div class="photo-thumb" style="${p.isCover ? 'border-color:#7ab8f5;box-shadow:0 0 0 2px rgba(122,184,245,0.3);' : p.isPoster ? 'border-color:#f5c842;box-shadow:0 0 0 2px rgba(245,200,66,0.3);' : ''}">
                     ${photoThumbImg(p)}
                   </div>
-                  <div class="photo-label">${p.isPoster ? '⭐ Poster' : p.name}</div>
+                  <div class="photo-label">${p.isCover ? '📌 Capa' : p.isPoster ? '⭐ Poster' : p.name}</div>
                 </div>`).join('')}
             </div>
           ` : '<p style="font-size:13px;color:var(--muted);padding:8px 0;">O cliente ainda não confirmou a seleção.</p>'}
@@ -1094,9 +1185,10 @@ function startPolling() { if (!pollInterval) pollInterval = setInterval(loadSess
 function stopPolling() { clearInterval(pollInterval); pollInterval = null; }
 
 // ── CLIENT GALLERY ──
-// galleryStep: 'poster' | 'photos'
+// galleryStep: 'cover' | 'poster' | 'photos'  ('cover' só existe pra sessões com plano OURO)
 let galleryStep = 'poster';
 let posterPhotoIds = new Set(); // múltiplos posters
+let coverPhotoId = null; // foto escolhida como capa (só plano OURO)
 
 async function loadClientGallery(sessionId) {
   const grid = document.getElementById('galleryGrid');
@@ -1116,7 +1208,8 @@ async function loadClientGallery(sessionId) {
     selectedPhotos = new Set();
     posterPhotoIds = new Set();
     posterPhotoId = null;
-    galleryStep = 'poster';
+    coverPhotoId = null;
+    galleryStep = session.plano === 'OURO' ? 'cover' : 'poster';
 
     if (session.confirmedAt) {
       confirmedSelections = session.selections || [];
@@ -1137,7 +1230,7 @@ async function loadClientGallery(sessionId) {
     }
 
     renderSessionNotesBanner(session.notes);
-    enterPosterStep();
+    if (session.plano === 'OURO') enterCoverStep(); else enterPosterStep();
 
   } catch (e) {
     grid.innerHTML = `<p style="color:var(--muted);padding:40px;text-align:center;grid-column:1/-1;">Erro ao carregar: ${e.message}</p>`;
@@ -1160,10 +1253,34 @@ function renderSessionNotesBanner(notes) {
   document.querySelector('.gallery-wrap').before(banner);
 }
 
+// Sessões plano OURO têm 3 etapas (capa → poster → fotos); as demais, 2 (poster → fotos).
+function totalGallerySteps() {
+  return currentSession?.plano === 'OURO' ? 3 : 2;
+}
+
+function enterCoverStep() {
+  galleryStep = 'cover';
+  coverPhotoId = null;
+  document.getElementById('selectedCount').textContent = '0';
+  document.getElementById('maxHint').textContent = '(máx. 1)';
+  document.getElementById('confirmBtn').disabled = true;
+  document.getElementById('confirmBtn').textContent = 'Confirmar capa →';
+  document.getElementById('confirmBtn').onclick = confirmCover;
+  document.getElementById('clientDownloadBtn').classList.remove('show');
+
+  document.getElementById('galleryStepLabel').textContent = `ETAPA 1 DE ${totalGallerySteps()}`;
+  document.getElementById('galleryStepDesc').textContent = 'Escolha 1 foto para a CAPA do álbum';
+  document.getElementById('galleryBar').style.display = 'flex';
+
+  renderGalleryGrid();
+}
+
 function enterPosterStep() {
   galleryStep = 'poster';
   posterPhotoIds = new Set();
   const numPosters = currentSession.numPosters || 1;
+  const total = totalGallerySteps();
+  const stepNum = total === 3 ? 2 : 1;
   document.getElementById('selectedCount').textContent = '0';
   document.getElementById('maxHint').textContent = `(máx. ${numPosters})`;
   document.getElementById('confirmBtn').disabled = true;
@@ -1171,7 +1288,7 @@ function enterPosterStep() {
   document.getElementById('confirmBtn').onclick = confirmPoster;
   document.getElementById('clientDownloadBtn').classList.remove('show');
 
-  document.getElementById('galleryStepLabel').textContent = 'ETAPA 1 DE 2';
+  document.getElementById('galleryStepLabel').textContent = `ETAPA ${stepNum} DE ${total}`;
   document.getElementById('galleryStepDesc').textContent = numPosters === 1
     ? 'Escolha 1 foto para o POSTER do álbum'
     : `Escolha ${numPosters} fotos para os POSTERS do álbum`;
@@ -1186,6 +1303,7 @@ function enterPhotosStep() {
   const numPosters = currentSession.numPosters || 1;
   const maxRemaining = currentSession.maxPhotos - numPosters;
   const minRemaining = Math.max(0, (currentSession.minPhotos || 0) - numPosters);
+  const total = totalGallerySteps();
 
   document.getElementById('selectedCount').textContent = '0';
   document.getElementById('maxHint').textContent = `(máx. ${maxRemaining})`;
@@ -1194,7 +1312,7 @@ function enterPhotosStep() {
   document.getElementById('confirmBtn').onclick = confirmSelection;
   document.getElementById('clientDownloadBtn').classList.remove('show');
 
-  document.getElementById('galleryStepLabel').textContent = 'ETAPA 2 DE 2';
+  document.getElementById('galleryStepLabel').textContent = `ETAPA ${total} DE ${total}`;
   document.getElementById('galleryStepDesc').textContent = `Agora selecione mais ${maxRemaining} foto${maxRemaining !== 1 ? 's' : ''} favoritas`;
 
   renderGalleryGrid();
@@ -1214,14 +1332,15 @@ function groupByEvent(list) {
 
 function renderGalleryGrid() {
   const grid = document.getElementById('galleryGrid');
-  const photos = galleryStep === 'poster'
-    ? currentSession.photos
-    : currentSession.photos.filter(p => !posterPhotoIds.has(p.id));
+  let photos;
+  if (galleryStep === 'cover') photos = currentSession.photos;
+  else if (galleryStep === 'poster') photos = currentSession.photos.filter(p => p.id !== coverPhotoId);
+  else photos = currentSession.photos.filter(p => !posterPhotoIds.has(p.id) && p.id !== coverPhotoId);
 
   const groups = groupByEvent(photos);
   const showLabels = groups.length > 1; // sessão com 1 evento só fica igual a antes
-  const clickFn = galleryStep === 'poster' ? 'selectPoster' : 'togglePhoto';
-  const chkChar = galleryStep === 'poster' ? '★' : '✓';
+  const clickFn = galleryStep === 'cover' ? 'selectCover' : galleryStep === 'poster' ? 'selectPoster' : 'togglePhoto';
+  const chkChar = galleryStep === 'cover' ? '📌' : galleryStep === 'poster' ? '★' : '✓';
 
   let idx = 0;
   grid.innerHTML = groups.map(group => {
@@ -1276,6 +1395,27 @@ function confirmPoster() {
   enterPhotosStep();
 }
 
+function selectCover(id) {
+  if (!currentSession) return;
+  if (coverPhotoId === id) {
+    // Deselecionar
+    coverPhotoId = null;
+    document.getElementById('gi_' + id)?.classList.remove('cover-sel', 'sel');
+  } else {
+    if (coverPhotoId) document.getElementById('gi_' + coverPhotoId)?.classList.remove('cover-sel', 'sel');
+    coverPhotoId = id;
+    document.getElementById('gi_' + id)?.classList.add('sel', 'cover-sel');
+  }
+  document.getElementById('selectedCount').textContent = coverPhotoId ? '1' : '0';
+  document.getElementById('confirmBtn').disabled = !coverPhotoId;
+}
+
+function confirmCover() {
+  if (!coverPhotoId) return;
+  showToast('Capa definida! Agora escolha o(s) poster(es).', 'info');
+  enterPosterStep();
+}
+
 function togglePhoto(id) {
   if (!currentSession || galleryStep !== 'photos') return;
   const numPosters = currentSession.numPosters || 1;
@@ -1324,11 +1464,14 @@ async function confirmSelection() {
 async function submitConfirmation() {
   if (!currentSession) return;
   const clientNotes = document.getElementById('clientNotesInput').value.trim();
+  const clientAddress = document.getElementById('clientAddressInput').value.trim();
   document.getElementById('clientNotesModal').classList.remove('show');
 
+  const coverPhoto = currentSession.photos.filter(p => p.id === coverPhotoId);
   const posterPhotos = currentSession.photos.filter(p => posterPhotoIds.has(p.id));
   const otherPhotos = currentSession.photos.filter(p => selectedPhotos.has(p.id));
   const selections = [
+    ...coverPhoto.map(p => ({ ...p, isCover: true })),
     ...posterPhotos.map(p => ({ ...p, isPoster: true })),
     ...otherPhotos
   ];
@@ -1338,10 +1481,10 @@ async function submitConfirmation() {
   try {
     await api(`/api/sessions/${currentSession.id}/confirm`, {
       method: 'PUT',
-      body: JSON.stringify({ selections, clientNotes })
+      body: JSON.stringify({ selections, clientNotes, clientAddress })
     });
     document.getElementById('modalList').innerHTML = selections.map((p, i) =>
-      `<div class="modal-list-item"><span>#${String(i+1).padStart(2,'0')}</span>${p.isPoster ? '⭐ POSTER — ' : ''}${p.name}</div>`
+      `<div class="modal-list-item"><span>#${String(i+1).padStart(2,'0')}</span>${p.isCover ? '📌 CAPA — ' : p.isPoster ? '⭐ POSTER — ' : ''}${p.name}</div>`
     ).join('') + (clientNotes ? `<div style="margin-top:14px;padding:12px;background:rgba(200,169,110,0.08);border-radius:8px;font-size:13px;color:var(--muted);"><span style="color:var(--accent);font-weight:600;">Sua observação: </span>${esc2(clientNotes)}</div>` : '');
     document.getElementById('successModal').classList.add('show');
   } catch (e) {
