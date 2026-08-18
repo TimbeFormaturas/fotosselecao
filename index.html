@@ -1004,7 +1004,9 @@ function renderSessions(sessions) {
     return;
   }
 
-  const received = sessions.filter(s => s.selections && s.selections.length > 0);
+  const received = sessions
+    .filter(s => s.selections && s.selections.length > 0)
+    .sort((a, b) => new Date(b.confirmedAt) - new Date(a.confirmedAt));
   const sent     = sessions.filter(s => !s.selections || s.selections.length === 0);
 
   function renderCard(s) {
