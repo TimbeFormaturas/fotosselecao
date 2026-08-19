@@ -323,8 +323,8 @@
           <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_0" onclick="document.getElementById('zoneInput_0').click()">
             <div class="upload-icon" style="font-size:28px;">🖼</div>
             <h3 style="font-size:14px;">Arraste fotos ou a pasta inteira aqui, ou clique para selecionar</h3>
-            <p style="font-size:12px;">JPG, PNG, WEBP, CR2</p>
-            <input type="file" id="zoneInput_0" multiple accept="image/*,.cr2">
+            <p style="font-size:12px;">JPG, PNG, WEBP, CR2, ARW</p>
+            <input type="file" id="zoneInput_0" multiple accept="image/*,.cr2,.arw">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
             <span id="zoneCount_0" style="font-size:12px;color:var(--muted);"></span>
@@ -338,8 +338,8 @@
           <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_1" onclick="document.getElementById('zoneInput_1').click()">
             <div class="upload-icon" style="font-size:28px;">🖼</div>
             <h3 style="font-size:14px;">Arraste fotos ou a pasta inteira aqui, ou clique para selecionar</h3>
-            <p style="font-size:12px;">JPG, PNG, WEBP, CR2</p>
-            <input type="file" id="zoneInput_1" multiple accept="image/*,.cr2">
+            <p style="font-size:12px;">JPG, PNG, WEBP, CR2, ARW</p>
+            <input type="file" id="zoneInput_1" multiple accept="image/*,.cr2,.arw">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
             <span id="zoneCount_1" style="font-size:12px;color:var(--muted);"></span>
@@ -353,8 +353,8 @@
           <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_2" onclick="document.getElementById('zoneInput_2').click()">
             <div class="upload-icon" style="font-size:28px;">🖼</div>
             <h3 style="font-size:14px;">Arraste fotos ou a pasta inteira aqui, ou clique para selecionar</h3>
-            <p style="font-size:12px;">JPG, PNG, WEBP, CR2</p>
-            <input type="file" id="zoneInput_2" multiple accept="image/*,.cr2">
+            <p style="font-size:12px;">JPG, PNG, WEBP, CR2, ARW</p>
+            <input type="file" id="zoneInput_2" multiple accept="image/*,.cr2,.arw">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
             <span id="zoneCount_2" style="font-size:12px;color:var(--muted);"></span>
@@ -770,36 +770,81 @@ function isJunkFile(file) {
 }
 
 function isRawFile(file) {
-  return /\.cr2$/i.test(file.name || '');
+  return /\.(cr2|arw)$/i.test(file.name || '');
 }
 
-// O CR2 da Canon é um contêiner TIFF: a IFD0 (primeiro bloco de metadados do
-// arquivo) aponta pra uma prévia JPEG em resolução total, gravada pela própria
-// câmera — não é a foto RAW em si (essa fica numa IFD separada, referenciada só
-// pelo cabeçalho específico do CR2, e não é um JPEG decodificável pelo navegador).
-// Aqui só lemos os primeiros KB do arquivo pra achar esses bytes; não decodificamos nada.
+// A prévia embutida no RAW vem sem EXIF. Sem reanexar a orientação, toda foto
+// tirada em pé aparece deitada — tanto na grade do painel quanto na galeria do
+// cliente. Este é o menor bloco APP1/Exif válido: cabeçalho TIFF + a tag 0x0112.
+function exifOrientationSegment(orientation) {
+  const seg = new Uint8Array(36);
+  const dv = new DataView(seg.buffer);
+  let p = 0;
+  dv.setUint16(p, 0xffe1); p += 2;                          // marcador APP1
+  dv.setUint16(p, 34);     p += 2;                          // tamanho (inclui estes 2 bytes)
+  seg.set([0x45, 0x78, 0x69, 0x66, 0x00, 0x00], p); p += 6; // "Exif\0\0"
+  dv.setUint16(p, 0x4949, true); p += 2;                    // "II" little-endian
+  dv.setUint16(p, 42, true);     p += 2;                    // magic TIFF
+  dv.setUint32(p, 8, true);      p += 4;                    // offset da IFD0
+  dv.setUint16(p, 1, true);      p += 2;                    // 1 entrada
+  dv.setUint16(p, 0x0112, true); p += 2;                    // tag Orientation
+  dv.setUint16(p, 3, true);      p += 2;                    // tipo SHORT
+  dv.setUint32(p, 1, true);      p += 4;                    // 1 valor
+  dv.setUint16(p, orientation, true); p += 2;               // valor
+  dv.setUint16(p, 0, true);      p += 2;                    // resto do campo de 4 bytes
+  dv.setUint32(p, 0, true);                                 // não há próxima IFD
+  return seg;
+}
+
+function readIfdTags(view, ifdOffset, le) {
+  const out = {};
+  if (ifdOffset <= 0 || ifdOffset + 2 > view.byteLength) return out;
+  const count = view.getUint16(ifdOffset, le);
+  if (count > 512) return out; // offset implausível: aborta em vez de ler lixo
+  for (let i = 0; i < count; i++) {
+    const e = ifdOffset + 2 + i * 12;
+    if (e + 12 > view.byteLength) break;
+    const tag = view.getUint16(e, le);
+    const type = view.getUint16(e + 2, le);
+    const n = view.getUint32(e + 4, le);
+    out[tag] = (type === 3 && n === 1) ? view.getUint16(e + 8, le) : view.getUint32(e + 8, le);
+  }
+  return out;
+}
+
+// RAW (CR2 da Canon, ARW da Sony) é um contêiner TIFF com uma prévia JPEG gravada
+// pela própria câmera — não decodificamos o sensor, só localizamos esses bytes.
+// Canon guarda a prévia em resolução total nos StripOffsets da IFD0 (Compression=6);
+// Sony guarda uma prévia de ~1616x1080 em JPEGInterchangeFormat. Aceitamos os dois.
 async function extractRawPreviewBlob(file) {
   try {
     const headBuf = await file.slice(0, 512 * 1024).arrayBuffer();
     const view = new DataView(headBuf);
-    if (view.getUint16(0, true) !== 0x4949) return null; // CR2 é sempre little-endian ("II")
-    if (view.getUint16(2, true) !== 42) return null; // magic TIFF
-    const ifd0Offset = view.getUint32(4, true);
-    const count = view.getUint16(ifd0Offset, true);
-    let compression = null, stripOffset = null, stripBytes = null;
-    for (let i = 0; i < count; i++) {
-      const eOff = ifd0Offset + 2 + i * 12;
-      const tag = view.getUint16(eOff, true);
-      const type = view.getUint16(eOff + 2, true);
-      const numValues = view.getUint32(eOff + 4, true);
-      const value = (type === 3 && numValues === 1) ? view.getUint16(eOff + 8, true) : view.getUint32(eOff + 8, true);
-      if (tag === 0x0103) compression = value;      // Compression
-      else if (tag === 0x0111) stripOffset = value;  // StripOffsets
-      else if (tag === 0x0117) stripBytes = value;   // StripByteCounts
+    if (view.byteLength < 16) return null;
+    const le = view.getUint16(0, false) === 0x4949; // "II" = little-endian
+    if (view.getUint16(2, le) !== 42) return null;  // magic TIFF
+
+    const tags = readIfdTags(view, view.getUint32(4, le), le);
+    const orientation = tags[0x0112] || 1;
+
+    const candidatos = [];
+    if (tags[0x0103] === 6 && tags[0x0111] && tags[0x0117]) candidatos.push({ off: tags[0x0111], len: tags[0x0117] }); // CR2
+    if (tags[0x0201] && tags[0x0202]) candidatos.push({ off: tags[0x0201], len: tags[0x0202] });                       // ARW
+    if (!candidatos.length) return null;
+
+    candidatos.sort((a, b) => b.len - a.len); // a maior é a de melhor resolução
+    const { off, len } = candidatos[0];
+    if (off + len > file.size) return null;
+
+    const jpeg = file.slice(off, off + len);
+    // Confere o SOI antes de aceitar — um offset errado devolveria lixo binário
+    const soi = new Uint8Array(await jpeg.slice(0, 2).arrayBuffer());
+    if (soi[0] !== 0xff || soi[1] !== 0xd8) return null;
+
+    if (orientation !== 1) {
+      return new Blob([new Uint8Array([0xff, 0xd8]), exifOrientationSegment(orientation), jpeg.slice(2)], { type: 'image/jpeg' });
     }
-    // Compression 6 = JPEG "old-style": é exatamente a prévia de resolução total.
-    if (compression !== 6 || !stripOffset || !stripBytes) return null;
-    return file.slice(stripOffset, stripOffset + stripBytes, 'image/jpeg');
+    return new Blob([jpeg], { type: 'image/jpeg' });
   } catch (e) {
     console.warn('Não foi possível extrair preview do RAW', file.name, e);
     return null;
@@ -829,7 +874,7 @@ async function handleZoneFiles(files, zoneIndex) {
       id: 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
       name: file.name,
       file,
-      contentType: raw ? 'image/x-canon-cr2' : file.type,
+      contentType: raw ? 'image/x-' + (file.name.split('.').pop().toLowerCase()) : file.type,
       isRaw: raw,
       previewUrl
     });
@@ -1605,7 +1650,7 @@ function esc(str) { return esc2(str); }
 // de imagem quebrada, mostra um placeholder — usado nas 3 grades de fotos abaixo.
 function photoThumbImg(p) {
   const src = p.thumbUrl || p.url;
-  if (/\.cr2(\?|$)/i.test(src || '')) {
+  if (/\.(cr2|arw)(\?|$)/i.test(src || '')) {
     return `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#2a2a2a;color:#999;font-size:10px;">RAW</div>`;
   }
   return `<img src="${src}" alt="${esc2(p.name)}" loading="lazy">`;
