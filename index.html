@@ -322,7 +322,7 @@
           <input type="text" class="auth-input" id="zoneName_0" placeholder="Nome do evento 1 (ex: Cerimônia)" style="margin-bottom:12px;">
           <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_0" onclick="document.getElementById('zoneInput_0').click()">
             <div class="upload-icon" style="font-size:28px;">🖼</div>
-            <h3 style="font-size:14px;">Arraste fotos aqui ou clique para selecionar</h3>
+            <h3 style="font-size:14px;">Arraste fotos ou a pasta inteira aqui, ou clique para selecionar</h3>
             <p style="font-size:12px;">JPG, PNG, WEBP, CR2</p>
             <input type="file" id="zoneInput_0" multiple accept="image/*,.cr2">
           </div>
@@ -337,7 +337,7 @@
           <input type="text" class="auth-input" id="zoneName_1" placeholder="Nome do evento 2 (ex: Making of)" style="margin-bottom:12px;">
           <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_1" onclick="document.getElementById('zoneInput_1').click()">
             <div class="upload-icon" style="font-size:28px;">🖼</div>
-            <h3 style="font-size:14px;">Arraste fotos aqui ou clique para selecionar</h3>
+            <h3 style="font-size:14px;">Arraste fotos ou a pasta inteira aqui, ou clique para selecionar</h3>
             <p style="font-size:12px;">JPG, PNG, WEBP, CR2</p>
             <input type="file" id="zoneInput_1" multiple accept="image/*,.cr2">
           </div>
@@ -352,7 +352,7 @@
           <input type="text" class="auth-input" id="zoneName_2" placeholder="Nome do evento 3 (ex: Festa)" style="margin-bottom:12px;">
           <div class="upload-zone" style="padding:28px 20px; margin-bottom:0;" id="zoneDrop_2" onclick="document.getElementById('zoneInput_2').click()">
             <div class="upload-icon" style="font-size:28px;">🖼</div>
-            <h3 style="font-size:14px;">Arraste fotos aqui ou clique para selecionar</h3>
+            <h3 style="font-size:14px;">Arraste fotos ou a pasta inteira aqui, ou clique para selecionar</h3>
             <p style="font-size:12px;">JPG, PNG, WEBP, CR2</p>
             <input type="file" id="zoneInput_2" multiple accept="image/*,.cr2">
           </div>
@@ -716,8 +716,57 @@ for (let z = 0; z < EVENT_ZONES_COUNT; z++) {
   const inputEl = document.getElementById('zoneInput_' + z);
   dropEl.addEventListener('dragover', e => { e.preventDefault(); dropEl.classList.add('drag-over'); });
   dropEl.addEventListener('dragleave', () => dropEl.classList.remove('drag-over'));
-  dropEl.addEventListener('drop', e => { e.preventDefault(); dropEl.classList.remove('drag-over'); handleZoneFiles(e.dataTransfer.files, z); });
+  dropEl.addEventListener('drop', async e => {
+    e.preventDefault();
+    dropEl.classList.remove('drag-over');
+    // filesFromDataTransfer precisa ser chamado ANTES de qualquer await — a lista de
+    // items do drag é esvaziada pelo navegador assim que o handler cede o controle.
+    handleZoneFiles(await filesFromDataTransfer(e.dataTransfer), z);
+  });
   inputEl.addEventListener('change', () => handleZoneFiles(inputEl.files, z));
+}
+
+// Arrastar uma PASTA entrega em dataTransfer.files só uma entrada de diretório (type
+// vazio, tamanho 0) — não os arquivos de dentro. Era por isso que soltar a pasta inteira
+// não subia nada e ainda por cima em silêncio. Aqui percorremos a árvore de diretórios
+// e devolvemos os arquivos reais; arrastar arquivos soltos continua funcionando igual.
+function readEntriesBatch(reader) {
+  return new Promise(resolve => reader.readEntries(resolve, () => resolve([])));
+}
+
+async function collectEntryFiles(entry, out) {
+  if (!entry) return;
+  if (entry.isFile) {
+    const file = await new Promise(resolve => entry.file(resolve, () => resolve(null)));
+    if (file) out.push(file);
+    return;
+  }
+  if (entry.isDirectory) {
+    const reader = entry.createReader();
+    // readEntries devolve no máximo ~100 itens por chamada: repetir até vir vazio.
+    let batch;
+    do {
+      batch = await readEntriesBatch(reader);
+      for (const child of batch) await collectEntryFiles(child, out);
+    } while (batch.length);
+  }
+}
+
+async function filesFromDataTransfer(dt) {
+  const entries = Array.from(dt.items || [])
+    .filter(i => i.kind === 'file' && typeof i.webkitGetAsEntry === 'function')
+    .map(i => i.webkitGetAsEntry())
+    .filter(Boolean);
+  if (!entries.length) return Array.from(dt.files || []); // navegador sem suporte a entries
+  const out = [];
+  for (const entry of entries) await collectEntryFiles(entry, out);
+  return out;
+}
+
+// Lixo que o Windows/macOS deixa dentro das pastas de fotos — ignorar sem avisar,
+// senão toda pasta arrastada mostraria "1 arquivo ignorado" sem motivo real.
+function isJunkFile(file) {
+  return /^(thumbs\.db|desktop\.ini|\.ds_store)$/i.test(file.name || '');
 }
 
 function isRawFile(file) {
@@ -758,9 +807,14 @@ async function extractRawPreviewBlob(file) {
 }
 
 async function handleZoneFiles(files, zoneIndex) {
-  for (const file of Array.from(files)) {
+  const list = Array.from(files);
+  const ignorados = [];
+  for (const file of list) {
     const raw = isRawFile(file);
-    if (!file.type.startsWith('image/') && !raw) continue;
+    if (!file.type.startsWith('image/') && !raw) {
+      if (!isJunkFile(file)) ignorados.push(file.name);
+      continue;
+    }
     // Não lemos o arquivo inteiro em base64 aqui — isso é o que travava com muitas fotos.
     // Guardamos só a referência ao File e uma URL leve (createObjectURL) pra preview.
     // CR2 é RAW: o navegador não decodifica, então extraímos o JPEG embutido pra prévia.
@@ -780,6 +834,17 @@ async function handleZoneFiles(files, zoneIndex) {
       previewUrl
     });
     renderZonePreview(zoneIndex);
+  }
+
+  // Antes, arquivo fora do formato era descartado sem nenhum aviso — foi assim que
+  // 17 CR2 sumiram de um envio sem ninguém perceber. Agora sempre avisa.
+  if (ignorados.length) {
+    const amostra = ignorados.slice(0, 3).join(', ');
+    const resto = ignorados.length > 3 ? ` e mais ${ignorados.length - 3}` : '';
+    showToast(`${ignorados.length} arquivo${ignorados.length > 1 ? 's' : ''} ignorado${ignorados.length > 1 ? 's' : ''} (formato não aceito): ${amostra}${resto}`, 'error');
+  }
+  if (!list.length) {
+    showToast('Nenhum arquivo encontrado no que foi solto aqui.', 'error');
   }
 }
 
