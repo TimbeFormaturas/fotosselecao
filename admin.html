@@ -382,17 +382,9 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 
 <script>
 // ── ADMIN USER (hashed) ──
-const ADMIN_USER = {username:'AdminTimbe',hash:'3c898ce6d0f708cdb239c92cebdda841:201a183a4d4b00c0f1a40170e21472c4fbb0412b294f967196c34e0764363518',email:'admin@fotosselecao.com'};
+// Sem hash aqui: este arquivo e publico. A senha e conferida so no Worker.
+const ADMIN_USER = {username:'Admin2026',email:'admin@fotosselecao.com'};
 
-async function verifyPassword(password, storedHash) {
-  const [salt, expected] = storedHash.split(':');
-  const saltBuf = hexToBytes(salt);
-  const enc = new TextEncoder().encode(password);
-  const keyMaterial = await crypto.subtle.importKey('raw', enc, 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt:saltBuf, iterations:100000, hash:'SHA-256' }, keyMaterial, 256);
-  const derived = bytesToHex(new Uint8Array(bits));
-  return derived === expected;
-}
 function hexToBytes(hex) { const b=new Uint8Array(hex.length/2); for(let i=0;i<b.length;i++) b[i]=parseInt(hex.substr(i*2,2),16); return b; }
 function bytesToHex(b) { return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(''); }
 
@@ -436,8 +428,6 @@ async function doLogin() {
   btn.disabled = true; btn.textContent = 'Acessando...'; errEl.textContent = '';
   try {
     if (username.toLowerCase() !== ADMIN_USER.username.toLowerCase()) throw new Error('Credenciais inválidas.');
-    const ok = await verifyPassword(password, ADMIN_USER.hash);
-    if (!ok) throw new Error('Credenciais inválidas.');
     const res = await fetch(WORKER_URL + '/api/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: ADMIN_USER.email, password })
