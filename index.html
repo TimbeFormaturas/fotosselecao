@@ -566,21 +566,13 @@
 <div class="toasts" id="toasts"></div>
 
 <script>
-// ── USERS (hashed, no plaintext passwords) ──
+// ── USERS (apenas mapeamento usuario -> email; a senha e conferida no Worker) ──
 const USERS = [
-  {username:'Damaris',hash:'c5827fd5f2f02d50bbe82b50b2e8d198:fec8bc2537f3f6c64f01ca07159f05353da920403e855fe3cdae3559c834a869',role:'photographer',displayName:'Damaris',email:'damaris@timbeformaturas.com'},
-  {username:'Rafaela',hash:'4afcb7cd95d8de9e62b994e54bc1b2df:56f6d7868ad00972273aef29608958ee536f28af17a77af129e3c3d3ddc34df5',role:'photographer',displayName:'Rafaela',email:'rafaela@timbeformaturas.com'},
+  {username:'Damaris',role:'photographer',displayName:'Damaris',email:'damaris@timbeformaturas.com'},
+  {username:'Rafaela',role:'photographer',displayName:'Rafaela',email:'rafaela@timbeformaturas.com'},
+  {username:'Rafa',role:'photographer',displayName:'Rafa',email:'rafa@timbeformaturas.com'},
 ];
 
-async function verifyPassword(password, storedHash) {
-  const [salt, expected] = storedHash.split(':');
-  const saltBuf = hexToBytes(salt);
-  const enc = new TextEncoder().encode(password);
-  const keyMaterial = await crypto.subtle.importKey('raw', enc, 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt:saltBuf, iterations:100000, hash:'SHA-256' }, keyMaterial, 256);
-  const derived = bytesToHex(new Uint8Array(bits));
-  return derived === expected;
-}
 function hexToBytes(hex) { const b=new Uint8Array(hex.length/2); for(let i=0;i<b.length;i++) b[i]=parseInt(hex.substr(i*2,2),16); return b; }
 function bytesToHex(b) { return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join(''); }
 
@@ -632,8 +624,8 @@ async function submitAuth() {
   try {
     const user = USERS.find(u => u.username.toLowerCase() === username.toLowerCase());
     if (!user) throw new Error('Usuário ou senha incorretos.');
-    const ok = await verifyPassword(password, user.hash);
-    if (!ok) throw new Error('Usuário ou senha incorretos.');
+    // A senha e conferida so no Worker. Guardar o hash aqui expunha as credenciais
+    // no arquivo publico do site, permitindo ataque offline sem limite de tentativas.
 
     // Gera token local — worker ainda valida via /api/auth/login com credenciais internas
     // Usamos o email interno para autenticar no worker
@@ -642,8 +634,8 @@ async function submitAuth() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: user.email, password })
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error('Erro ao autenticar no servidor.');
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error === 'Credenciais inválidas' ? 'Usuário ou senha incorretos.' : 'Erro ao autenticar no servidor.');
     authToken = json.token;
     authEmail = user.displayName;
     authUserEmail = user.email;
