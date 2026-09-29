@@ -314,6 +314,10 @@
     <h1 class="panel-title">Painel do Funcionário</h1>
     <p class="panel-sub">Envie as fotos e gere um link personalizado para o cliente selecionar.</p>
 
+    <!-- Recados nao lidos, fixos no topo — o conteudo vem do banco, nunca deste arquivo,
+         que e publico. O X marca como lido e some em todas as abas na proxima atualizacao. -->
+    <div id="recadosFixos"></div>
+
     <div class="config-card" style="padding-top:24px;">
       <h3>Fotos por evento <span style="font-size:11px;color:var(--accent);text-transform:none;letter-spacing:0;font-weight:400;">— dê um nome a cada um; o cliente vê as fotos separadas por essas seções</span></h3>
       <div style="display:flex; flex-direction:column; gap:26px;">
@@ -1281,7 +1285,9 @@ async function clearSelection(sessionId) {
 }
 
 // ── POLLING ──
-function startPolling() { if (!pollInterval) pollInterval = setInterval(loadSessions, 10000); }
+// Recarrega tambem os recados, para que aparecam e sumam em todas as abas abertas
+// sem precisar recarregar a pagina.
+function startPolling() { if (!pollInterval) pollInterval = setInterval(() => { loadSessions(); loadReminders(); }, 10000); }
 function stopPolling() { clearInterval(pollInterval); pollInterval = null; }
 
 // ── CLIENT GALLERY ──
@@ -1602,7 +1608,23 @@ async function loadReminders() {
     const data = await api('/api/reminders');
     reminders = data.reminders || [];
     updateReminderBadge();
+    renderRecadosFixos();
   } catch(e) {}
+}
+
+// Recados nao lidos aparecem fixos no topo do painel, sem precisar abrir o sininho.
+function renderRecadosFixos() {
+  const box = document.getElementById('recadosFixos');
+  if (!box) return;
+  const novos = reminders.filter(r => !r.readAt);
+  box.innerHTML = novos.map(r => `
+    <div style="position:relative;background:rgba(200,169,110,0.08);border:1px solid rgba(200,169,110,0.35);border-radius:12px;padding:16px 44px 16px 18px;margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:700;color:var(--accent);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:6px;">${esc2(r.title)}</div>
+      <div style="font-size:14px;color:var(--text);line-height:1.6;white-space:pre-wrap;">${esc2(r.message)}</div>
+      <button onclick="markRead('${r.id}')" title="Remover recado"
+        style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;padding:2px 6px;">×</button>
+    </div>
+  `).join('');
 }
 
 function openReminders() {
@@ -1650,6 +1672,7 @@ async function markRead(id) {
     if (r) r.readAt = new Date().toISOString();
     renderReminderList();
     updateReminderBadge();
+    renderRecadosFixos();
   } catch(e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
