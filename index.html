@@ -1140,7 +1140,8 @@ async function downloadPhotos(photos) {
       const res = await fetch(photo.url, { mode: 'cors' });
       if (!res.ok) throw new Error('fetch failed');
       const blob = await res.blob();
-      const prefix = photo.isPoster ? '00_POSTER_' : String(ok + 1).padStart(2, '0') + '_';
+      const n = String(photo.n || ok + 1).padStart(3, '0');
+      const prefix = n + '_' + (photo.isCover ? 'CAPA_' : photo.isPoster ? 'POSTER_' : '');
       folder.file(prefix + photo.name, blob);
       ok++;
     } catch(e) {
@@ -1191,6 +1192,7 @@ async function loadSessions() {
 
 function renderSessions(sessions) {
   const el = document.getElementById('sessionsList');
+  sessions.forEach(stampPhotoNumbers);
   if (!sessions.length) {
     el.innerHTML = `<div class="selections-empty"><div class="icon">📭</div><p>Nenhuma sessão criada ainda.</p></div>`;
     return;
@@ -1239,7 +1241,7 @@ function renderSessions(sessions) {
                   <div class="photo-thumb" style="${p.isCover ? 'border-color:#7ab8f5;box-shadow:0 0 0 2px rgba(122,184,245,0.3);' : p.isPoster ? 'border-color:#f5c842;box-shadow:0 0 0 2px rgba(245,200,66,0.3);' : ''}">
                     ${photoThumbImg(p)}
                   </div>
-                  <div class="photo-label">${p.isCover ? '📌 Capa' : p.isPoster ? '⭐ Poster' : p.name}</div>
+                  <div class="photo-label"><span style="color:var(--accent);font-weight:700;">${fotoNum(p)}</span> ${p.isCover ? '📌 Capa' : p.isPoster ? '⭐ Poster' : esc(p.name)}</div>
                 </div>`).join('')}
             </div>
           ` : '<p style="font-size:13px;color:var(--muted);padding:8px 0;">O cliente ainda não confirmou a seleção.</p>'}
@@ -1306,7 +1308,7 @@ async function loadClientGallery(sessionId) {
   grid.innerHTML = '<div class="spinner-wrap" style="grid-column:1/-1"><div class="spinner"></div></div>';
   try {
     const { session } = await api(`/api/sessions/${sessionId}`);
-    currentSession = session;
+    currentSession = stampPhotoNumbers(session);
 
     document.getElementById('galleryTitle').textContent = `Olá, ${session.clientName}! 🎞`;
     document.getElementById('gallerySubtitle').textContent = session.eventName;
@@ -1448,16 +1450,14 @@ function renderGalleryGrid() {
   const clickFn = galleryStep === 'cover' ? 'selectCover' : galleryStep === 'poster' ? 'selectPoster' : 'togglePhoto';
   const chkChar = galleryStep === 'cover' ? '📌' : galleryStep === 'poster' ? '★' : '✓';
 
-  let idx = 0;
   grid.innerHTML = groups.map(group => {
     const items = group.photos.map(p => {
-      idx++;
       return `
         <div class="gitem" id="gi_${p.id}" onclick="${clickFn}('${p.id}')">
           ${photoThumbImg(p)}
           <div class="overlay"></div>
           <div class="chk">${chkChar}</div>
-          <div class="num">#${String(idx).padStart(3, '0')}</div>
+          <div class="num">${fotoNum(p)}</div>
         </div>`;
     }).join('');
     if (!showLabels) return items;
@@ -1716,6 +1716,18 @@ function esc(str) { return esc2(str); }
 
 // Fallback pro raríssimo caso de um CR2 sem preview embutido: em vez de ícone
 // de imagem quebrada, mostra um placeholder — usado nas 3 grades de fotos abaixo.
+// O numero que o cliente ve na galeria (#053) e a posicao da foto no album, na ordem
+// em que foi enviada. Gravamos esse numero em cada foto assim que a sessao chega, para
+// que galeria, painel do funcionario e nomes de arquivo do ZIP usem sempre o mesmo numero.
+function stampPhotoNumbers(s) {
+  if (!s) return s;
+  const num = new Map((s.photos || []).map((p, i) => [p.id, i + 1]));
+  (s.photos || []).forEach(p => { p.n = num.get(p.id); });
+  (s.selections || []).forEach(p => { p.n = num.get(p.id); });
+  return s;
+}
+function fotoNum(p) { return p && p.n ? '#' + String(p.n).padStart(3, '0') : ''; }
+
 function photoThumbImg(p) {
   const src = p.thumbUrl || p.url;
   if (/\.(cr2|arw)(\?|$)/i.test(src || '')) {
