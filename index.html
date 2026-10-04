@@ -411,7 +411,7 @@
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Quantidade de posters <span style="font-size:11px;color:var(--accent)">(etapa 1)</span></label>
+          <label>Quantidade de posters <span style="font-size:11px;color:var(--accent)">(etapa 1)</span><span id="postersFixoHint" style="font-size:11px;color:var(--accent)"></span></label>
           <input type="number" id="numPosters" value="1" min="1" oninput="updatePhotosHint()">
         </div>
         <div class="form-group">
@@ -716,11 +716,36 @@ function openPlanoModal() {
   document.getElementById('planoModal').classList.add('show');
 }
 
+// Quantos posters o cliente escolhe. O plano OURO e fechado em 2 posters (+ 1 capa),
+// entao o campo do formulario nao manda nesse caso — nem nas sessoes antigas, que
+// foram criadas com 3 por falta dessa regra.
+const POSTERS_OURO = 2;
+function postersDaSessao(s) {
+  if (s && s.plano === 'OURO') return POSTERS_OURO;
+  return Math.max(1, parseInt(s && s.numPosters) || 1);
+}
+
 function choosePlano(p) {
   selectedPlano = p;
   document.getElementById('planoBtn').textContent = PLANO_LABELS[p];
   document.getElementById('planoBtn').style.color = 'var(--text)';
   document.getElementById('planoModal').classList.remove('show');
+  // No OURO o numero de posters e fixo: preenche e trava o campo.
+  const inp = document.getElementById('numPosters');
+  const hint = document.getElementById('postersFixoHint');
+  if (inp) {
+    if (p === 'OURO') {
+      inp.value = POSTERS_OURO;
+      inp.readOnly = true;
+      inp.style.opacity = '0.6';
+      if (hint) hint.textContent = ' — fixo no Ouro: 2 posters + 1 capa';
+    } else {
+      inp.readOnly = false;
+      inp.style.opacity = '';
+      if (hint) hint.textContent = '';
+    }
+    updatePhotosHint();
+  }
 }
 
 // ── UPLOAD / PREVIEW (3 blocos de evento) ──
@@ -1017,7 +1042,7 @@ async function createSession() {
     const clientName = document.getElementById('clientName').value.trim() || 'Cliente';
     const eventName = document.getElementById('eventName').value.trim() || 'Álbum';
     const minPhotos = parseInt(document.getElementById('minPhotos').value) || 0;
-    const numPosters = Math.max(1, parseInt(document.getElementById('numPosters').value) || 1);
+    const numPosters = postersDaSessao({ plano: selectedPlano, numPosters: document.getElementById('numPosters').value });
     const notes = document.getElementById('sessionNotes').value.trim();
 
     if (!selectedPlano) {
@@ -1416,7 +1441,7 @@ function enterCoverStep() {
 function enterPosterStep() {
   galleryStep = 'poster';
   posterPhotoIds = new Set();
-  const numPosters = currentSession.numPosters || 1;
+  const numPosters = postersDaSessao(currentSession);
   const total = totalGallerySteps();
   const stepNum = total === 3 ? 2 : 1;
   document.getElementById('selectedCount').textContent = '0';
@@ -1438,7 +1463,7 @@ function enterPosterStep() {
 function enterPhotosStep() {
   galleryStep = 'photos';
   selectedPhotos = new Set();
-  const numPosters = currentSession.numPosters || 1;
+  const numPosters = postersDaSessao(currentSession);
   const maxRemaining = currentSession.maxPhotos - numPosters;
   const minRemaining = Math.max(0, (currentSession.minPhotos || 0) - numPosters);
   const total = totalGallerySteps();
@@ -1501,7 +1526,7 @@ function renderGalleryGrid() {
 
 function selectPoster(id) {
   if (!currentSession) return;
-  const numPosters = currentSession.numPosters || 1;
+  const numPosters = postersDaSessao(currentSession);
 
   if (posterPhotoIds.has(id)) {
     // Deselecionar
@@ -1524,7 +1549,7 @@ function selectPoster(id) {
 }
 
 function confirmPoster() {
-  const numPosters = currentSession.numPosters || 1;
+  const numPosters = postersDaSessao(currentSession);
   if (posterPhotoIds.size < numPosters) return;
   const label = numPosters === 1 ? 'Poster definido!' : `${numPosters} posters definidos!`;
   showToast(`${label} Agora selecione as demais fotos.`, 'info');
@@ -1554,7 +1579,7 @@ function confirmCover() {
 
 function togglePhoto(id) {
   if (!currentSession || galleryStep !== 'photos') return;
-  const numPosters = currentSession.numPosters || 1;
+  const numPosters = postersDaSessao(currentSession);
   const maxRemaining = currentSession.maxPhotos - numPosters;
   const minRemaining = Math.max(0, (currentSession.minPhotos || 0) - numPosters);
 
