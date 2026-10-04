@@ -1205,6 +1205,7 @@ function renderSessions(sessions) {
 
   function renderCard(s) {
     const hasSel = s.selections && s.selections.length > 0;
+    const selectedIds = new Set((s.selections || []).map(p => p.id));
     const date = s.confirmedAt ? new Date(s.confirmedAt).toLocaleString('pt-BR') : new Date(s.createdAt).toLocaleString('pt-BR');
     const link = `${location.origin}${location.pathname}?session=${s.id}`;
     const isOwner = !s.ownerEmail || s.ownerEmail.toLowerCase() === authUserEmail.toLowerCase();
@@ -1222,7 +1223,7 @@ function renderSessions(sessions) {
         </div>
         <div class="session-body" id="sb_${s.id}">
           <div class="session-body-actions">
-            <span>${s.photos.length} foto${s.photos.length !== 1 ? 's' : ''} no álbum</span>
+            <span onclick="toggleAlbum('${s.id}')" style="cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:3px;" title="Ver o álbum com os números que o cliente vê">${s.photos.length} foto${s.photos.length !== 1 ? 's' : ''} no álbum</span>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               ${hasSel ? `<button class="ghost-btn" style="font-size:12px;" onclick='adminDownload(${JSON.stringify(s.selections)})'>⬇ Baixar selecionadas</button>` : ''}
               <button class="ghost-btn" style="font-size:12px;" onclick="copyToClip('${link}')">Copiar link</button>
@@ -1245,6 +1246,23 @@ function renderSessions(sessions) {
                 </div>`).join('')}
             </div>
           ` : '<p style="font-size:13px;color:var(--muted);padding:8px 0;">O cliente ainda não confirmou a seleção.</p>'}
+          <div id="album_${s.id}" style="display:none;">
+            <p style="font-size:13px;color:var(--muted);margin:18px 0 12px;border-top:0.5px solid var(--border);padding-top:16px;">
+              Álbum completo — os números são os mesmos que o cliente vê na grade:
+            </p>
+            <div class="photos-grid">
+              ${s.photos.map(p => {
+                const sel = selectedIds.has(p.id);
+                return `
+                <div class="photo-cell">
+                  <div class="photo-thumb" style="${sel ? 'border-color:var(--success);box-shadow:0 0 0 2px rgba(91,189,138,0.3);' : 'opacity:0.65;'}">
+                    ${photoThumbImg(p)}
+                  </div>
+                  <div class="photo-label"><span style="color:var(--accent);font-weight:700;">${fotoNum(p)}</span> ${sel ? '✓ ' : ''}${esc(p.name)}</div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
         </div>
       </div>`;
   }
@@ -1275,6 +1293,10 @@ function renderSessions(sessions) {
 }
 
 function toggleSession(id) { document.getElementById('sb_' + id)?.classList.toggle('open'); }
+function toggleAlbum(id) {
+  const el = document.getElementById('album_' + id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
 function copyToClip(text) { navigator.clipboard.writeText(text).catch(()=>{}); showToast('Link copiado!', 'info'); }
 async function adminDownload(selections) { await downloadPhotos(selections); }
 async function clearSelection(sessionId) {
