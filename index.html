@@ -168,7 +168,9 @@
   .photo-cell { display: flex; flex-direction: column; gap: 4px; }
   .photo-thumb { aspect-ratio: 1; border-radius: 6px; overflow: hidden; background: var(--surface2); border: 1px solid var(--border); }
   .photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .photo-label { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+  .photo-label { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.45; }
+  .photo-label .code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .photo-label .num { display: block; color: var(--accent); font-weight: 700; font-size: 12px; }
 
   /* CLIENT GALLERY */
   .gallery-hero { background: var(--surface); border-bottom: 0.5px solid var(--border); padding: 32px; text-align: center; }
@@ -1242,7 +1244,10 @@ function renderSessions(sessions) {
                   <div class="photo-thumb" style="${p.isCover ? 'border-color:#7ab8f5;box-shadow:0 0 0 2px rgba(122,184,245,0.3);' : p.isPoster ? 'border-color:#f5c842;box-shadow:0 0 0 2px rgba(245,200,66,0.3);' : ''}">
                     ${photoThumbImg(p)}
                   </div>
-                  <div class="photo-label"><span style="color:var(--accent);font-weight:700;">${fotoNum(p)}</span> ${p.isCover ? '📌 Capa' : p.isPoster ? '⭐ Poster' : esc(p.name)}</div>
+                  <div class="photo-label">
+                    <span class="code" title="${esc(p.name)}">${esc(p.name)}</span>
+                    <span class="num">${fotoNum(p)}${p.isCover ? ' 📌 Capa' : p.isPoster ? ' ⭐ Poster' : ''}</span>
+                  </div>
                 </div>`).join('')}
             </div>
           ` : '<p style="font-size:13px;color:var(--muted);padding:8px 0;">O cliente ainda não confirmou a seleção.</p>'}
@@ -1258,7 +1263,10 @@ function renderSessions(sessions) {
                   <div class="photo-thumb" style="${sel ? 'border-color:var(--success);box-shadow:0 0 0 2px rgba(91,189,138,0.3);' : 'opacity:0.65;'}">
                     ${photoThumbImg(p)}
                   </div>
-                  <div class="photo-label"><span style="color:var(--accent);font-weight:700;">${fotoNum(p)}</span> ${sel ? '✓ ' : ''}${esc(p.name)}</div>
+                  <div class="photo-label">
+                    <span class="code" title="${esc(p.name)}">${esc(p.name)}</span>
+                    <span class="num">${fotoNum(p)}${sel ? ' ✓' : ''}</span>
+                  </div>
                 </div>`;
               }).join('')}
             </div>
